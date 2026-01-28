@@ -1,4 +1,16 @@
-.cache/
+# PlatformIO directories and files
+.pio/
+.vscode/
+.gcc-flags.json
+
+# If you accidentally initialized packages inside the repo
 packages/
 platforms/
+
+# Build artifacts
+*.hex
+*.bin
+*.elf
+
+# Local configuration
 appstate.json
