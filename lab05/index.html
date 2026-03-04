@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Joystick + LEDs UI</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#121a33;
+      --muted:#7f8bb3;
+      --ring:#2a3560;
+      --dot:#d7e2ff;
+      --ledOff:#2a2f45;
+      --ledOn:#2fff7a;
+      --ledGlow: 0 0 18px rgba(47,255,122,.55), 0 0 40px rgba(47,255,122,.25);
+      --cardShadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 700px at 20% 10%, #16204a 0%, var(--bg) 55%, #070a14 100%);
+      color: #e8eeff;
+      display:flex;
+      min-height:100vh;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+
+    .wrap{
+      width:min(980px, 100%);
+      display:grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap:20px;
+      align-items: stretch;
+    }
+
+    .card{
+      background: linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,.025));
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 22px;
+      box-shadow: var(--cardShadow);
+      padding: 22px 22px 18px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    h1{
+      margin:0 0 10px 0;
+      font-size:18px;
+      letter-spacing:.2px;
+    }
+    .sub{
+      margin:0 0 14px 0;
+      color: var(--muted);
+      font-size:13px;
+      line-height:1.4;
+    }
+
+    /* Joystick area */
+    .joyArea{
+      display:grid;
+      place-items:center;
+      flex: none;
+      height: 400px;
+      padding: 12px 0 8px;
+    }
+
+    .circle{
+      width: 360px;
+      height: 360px;
+      border-radius: 999px;
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,.05) 0 36%, transparent 37%),
+        radial-gradient(circle at center, rgba(255,255,255,.03) 0 63%, transparent 64%),
+        radial-gradient(circle at center, rgba(0,0,0,.1) 0 100%);
+      border: 2px solid rgba(255,255,255,.10);
+      outline: 10px solid rgba(255,255,255,.03);
+      position:relative;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+
+    .crossH, .crossV{
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      background: rgba(255,255,255,.07);
+    }
+    .crossH{ width: 84%; height: 2px; }
+    .crossV{ height: 84%; width: 2px; }
+
+    .dot{
+      width: 18px;
+      height: 18px;
+      border-radius:999px;
+      background: var(--dot);
+      box-shadow: 0 0 20px rgba(215,226,255,.35);
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform: translate(-50%, -50%);
+      transition: left 80ms linear, top 80ms linear;
+    }
+
+    /* Compass LED layout */
+    .compassWrap{
+      flex: none;
+      height: 400px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .compassRing{
+      position: relative;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center, rgba(47,255,122,.05) 0%, transparent 60%),
+        radial-gradient(circle at center, rgba(0,0,0,.18) 0 100%);
+      border: 1.5px solid rgba(47,255,122,.2);
+      box-shadow:
+        0 0 0 10px rgba(47,255,122,.03),
+        0 0 40px rgba(47,255,122,.07),
+        inset 0 0 50px rgba(0,0,0,.25);
+    }
+
+    /* Inner cross lines */
+    .compassRing::before, .compassRing::after{
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,.08);
+    }
+    .compassRing::before{   /* horizontal */
+      left: 10%; right: 10%;
+      top: 50%; height: 1px;
+      transform: translateY(-50%);
+    }
+    .compassRing::after{    /* vertical */
+      top: 10%; bottom: 10%;
+      left: 50%; width: 1px;
+      transform: translateX(-50%);
+    }
+
+    .compassCenter{
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+    }
+
+    .ledNode{
+      position: absolute;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    /* up: column — LED on top (near edge), label below toward center */
+    .ledNode.up{
+      flex-direction: column;
+      top: 20px; left: 50%;
+      transform: translateX(-50%);
+    }
+    /* down: column-reverse — LED on bottom (near edge), label above toward center */
+    .ledNode.down{
+      flex-direction: column-reverse;
+      bottom: 20px; left: 50%;
+      transform: translateX(-50%);
+    }
+    /* left: row — LED on left (near edge), label on right toward center */
+    .ledNode.left{
+      flex-direction: row;
+      left: 20px; top: 50%;
+      transform: translateY(-50%);
+    }
+    /* right: row-reverse — label on left toward center, LED on right (near edge) */
+    .ledNode.right{
+      flex-direction: row-reverse;
+      right: 20px; top: 50%;
+      transform: translateY(-50%);
+    }
+
+    .ledPort{
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: .4px;
+      line-height: 1;
+    }
+
+    .led{
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--ledOff);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.07);
+      transition: background 130ms ease, box-shadow 130ms ease;
+      flex-shrink: 0;
+    }
+
+    .led.on{
+      background: var(--ledOn);
+      box-shadow: inset 0 0 0 2px rgba(0,0,0,.15), var(--ledGlow);
+    }
+
+    .statusRow{
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .statusRowInner{
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pill{
+      flex: 1;
+      padding: 9px 13px;
+      background: rgba(0,0,0,.28);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      white-space: nowrap;
+    }
+
+    .pill b{ color: #e8eeff; font-weight: 600; display: inline-block; min-width: 2.4em; text-align: left; }
+    .volt{ font-size: 10px; color: var(--muted); font-weight: 400; margin-left: 2px; }
+
+    .btn{
+      appearance:none;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color:#e8eeff;
+      border-radius: 12px;
+      padding:10px 12px;
+      font-size:13px;
+      cursor:pointer;
+      transition: transform .08s ease, background .12s ease;
+    }
+    .btn:active{ transform: translateY(1px); }
+    .btn:hover{ background: rgba(255,255,255,.09); }
+
+    @media (max-width: 860px){
+      .wrap{ grid-template-columns: 1fr; }
+      .circle{ width: 300px; height: 300px; }
+      .compassRing{ width: 240px; height: 240px; }
+      .ledNode.up   { top: 16px; }
+      .ledNode.down { bottom: 16px; }
+      .ledNode.left { left: 16px; }
+      .ledNode.right{ right: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Joystick</h1>
+      <p class="sub">
+        Dot moves with X/Y. Accepts raw ADC values (0–1023) or discrete -1/0/1.
+      </p>
+
+      <div class="joyArea">
+        <div class="circle" id="circle">
+          <div class="crossH"></div>
+          <div class="crossV"></div>
+          <div class="dot" id="dot"></div>
+        </div>
+      </div>
+
+      <div class="statusRow">
+        <div class="statusRowInner">
+          <div class="pill">Connection: <b id="conn">disconnected</b></div>
+          <button class="btn" id="reconnect">Reconnect</button>
+        </div>
+        <div class="statusRowInner">
+          <button class="btn" id="pauseBtn" style="flex:1">Pause</button>
+          <button class="btn" id="testBtn"  style="flex:1">Test</button>
+        </div>
+        <div class="statusRowInner">
+          <div class="pill">X: <b id="xVal">0</b> <span class="volt" id="xVolt">0.000V</span></div>
+          <div class="pill">Y: <b id="yVal">0</b> <span class="volt" id="yVolt">0.000V</span></div>
+          <div class="pill">Btn: <b id="modeVal">0</b></div>
+        </div>
+        <div class="statusRowInner">
+          <div class="pill">Rate: <b id="frameRate">0</b> <span class="volt">msg/s</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h1>LEDs</h1>
+      <p class="sub">
+        Compass view of PORTB outputs. Center lights when joystick is at rest.
+      </p>
+
+      <div class="compassWrap">
+        <div class="compassRing">
+          <span class="led compassCenter" id="ledC"></span>
+          <div class="ledNode up">
+            <span class="led" id="ledU"></span>
+            <span class="ledPort">PB3</span>
+          </div>
+          <div class="ledNode down">
+            <span class="led" id="ledD"></span>
+            <span class="ledPort">PB1</span>
+          </div>
+          <div class="ledNode left">
+            <span class="led" id="ledL"></span>
+            <span class="ledPort">PB2</span>
+          </div>
+          <div class="ledNode right">
+            <span class="led" id="ledR"></span>
+            <span class="ledPort">PB0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="statusRow" style="margin-top: 36px;">
+        <div class="statusRowInner">
+          <div class="pill">Mode: <b id="modeLabel">all_off</b></div>
+        </div>
+        <div class="statusRowInner">
+          <div class="pill">PB3 Up: <b id="lblU">off</b></div>
+          <div class="pill">PB1 Dn: <b id="lblD">off</b></div>
+          <div class="pill">PB0 R: <b id="lblR">off</b></div>
+          <div class="pill">PB2 L: <b id="lblL">off</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // WebSocket → UI
+    // Expected message (JSON line):
+    // {"x":-1,"y":0,"mode":0,"led":{"L":1,"R":0,"U":0,"D":1}}
+    // or without led object; we will compute LEDs from x/y/mode if missing.
+
+    const dot = document.getElementById("dot");
+    const circle = document.getElementById("circle");
+    const connEl = document.getElementById("conn");
+    const xEl = document.getElementById("xVal");
+    const yEl = document.getElementById("yVal");
+    const modeEl = document.getElementById("modeVal");
+
+    const ledL = document.getElementById("ledL");
+    const ledR = document.getElementById("ledR");
+    const ledU = document.getElementById("ledU");
+    const ledD = document.getElementById("ledD");
+    const ledC = document.getElementById("ledC");
+    const modeLabelEl = document.getElementById("modeLabel");
+    const lblR = document.getElementById("lblR");
+    const lblL = document.getElementById("lblL");
+    const lblU = document.getElementById("lblU");
+    const lblD = document.getElementById("lblD");
+
+    const reconnectBtn = document.getElementById("reconnect");
+    const pauseBtn     = document.getElementById("pauseBtn");
+    const testBtn      = document.getElementById("testBtn");
+    const xVoltEl      = document.getElementById("xVolt");
+    const yVoltEl      = document.getElementById("yVolt");
+
+    let ws = null;
+    let paused = false;
+    let testInterval = null;
+    let frameCount  = 0;   // message accumulator for sample rate
+    const frameRateEl  = document.getElementById("frameRate");
+    setInterval(() => {
+      frameRateEl.textContent  = frameCount;
+      frameCount  = 0;
+    }, 1000);
+
+    function setLed(el, on){
+      el.classList.toggle("on", !!on);
+    }
+
+    function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+    function updateDot(x, y){
+      // x,y in [-1,0,1] → map to circle
+      const rect = circle.getBoundingClientRect();
+      const radius = rect.width / 2;
+      const maxTravel = radius * 0.72; // keep inside ring
+
+      const px = radius + (x * maxTravel);
+      const py = radius - (y * maxTravel); // y+ is up
+
+      dot.style.left = px + "px";
+      dot.style.top  = py + "px";
+    }
+
+    // Normalize a raw ADC value (0-1023) to the -1..1 range.
+    // Inverted: low end (+1), center (0), high end (-1).
+    // Uses separate divisors for each half so the full ±1 range is always reachable
+    // even when the calibrated center is not at 512.
+    const ADC_CX = 504, ADC_CY = 504;
+    const ADC_VREF = 5.0, ADC_STEPS = 1024;
+    function adcToVoltage(raw){ return (raw * ADC_VREF / ADC_STEPS).toFixed(3) + "V"; }
+
+    function normalizeAxis(v, center){
+      if(v <= center){
+        // center → 0 .. 0 → +1
+        return clamp((center - v) / center, -1, 1);
+      } else {
+        // center → 0 .. 1023 → -1
+        return clamp((center - v) / (1023 - center), -1, 1);
+      }
+    }
+
+    function computeLedsFromLogic(x, y, mode){
+      // Works with normalised float values in [-1, 1].
+      // mode: 0 -> all_off() behaviour, 1 -> all_on() behaviour
+      const T = 0.25; // dead-zone threshold
+      let L=0,R=0,U=0,D=0;
+      if(mode === 0){
+        if(x < -T)      { L=1; R=0; }
+        else if(x > T)  { L=0; R=1; }
+        else            { L=0; R=0; }
+
+        if(y < -T)      { D=1; U=0; }
+        else if(y > T)  { D=0; U=1; }
+        else            { D=0; U=0; }
+      } else {
+        if(x < -T)      { L=0; R=1; }
+        else if(x > T)  { L=1; R=0; }
+        else            { L=1; R=1; }
+
+        if(y < -T)      { D=0; U=1; }
+        else if(y > T)  { D=1; U=0; }
+        else            { D=1; U=1; }
+      }
+      const centered = Math.abs(x) <= T && Math.abs(y) <= T;
+      // mode 0 (all_off): center ON when centered, OFF when moved
+      // mode 1 (all_on):  center OFF when centered, ON when moved  (inverted like the other LEDs)
+      const C = (mode === 0) ? (centered ? 1 : 0) : (centered ? 0 : 1);
+      return {L,R,U,D,C};
+    }
+
+    function applyState(state){
+      const rawX    = parseFloat(state.x    ?? 0);
+      const rawY    = parseFloat(state.y    ?? 0);
+      const button  = parseInt(state.mode   ?? 0, 10); // third CSV field: button state
+      const mode    = button ? 1 : 0;
+
+      const x = normalizeAxis(rawX, ADC_CX);
+      const y = normalizeAxis(rawY, ADC_CY);
+
+      xEl.textContent    = rawX;          // show the raw value from serial
+      yEl.textContent    = rawY;
+      modeEl.textContent = button;
+      xVoltEl.textContent = adcToVoltage(rawX);
+      yVoltEl.textContent = adcToVoltage(rawY);
+
+      updateDot(x, y);
+
+      const leds = state.led && typeof state.led === "object"
+        ? {
+            L: !!state.led.L, R: !!state.led.R,
+            U: !!state.led.U, D: !!state.led.D,
+            C: (() => { const c = Math.abs(x) <= 0.25 && Math.abs(y) <= 0.25; return mode === 0 ? c : !c; })()
+          }
+        : computeLedsFromLogic(x, y, mode);
+
+      setLed(ledL, leds.L);
+      setLed(ledR, leds.R);
+      setLed(ledU, leds.U);
+      setLed(ledD, leds.D);
+      setLed(ledC, leds.C);
+
+      modeLabelEl.textContent = mode === 0 ? "all_off" : "all_on";
+      lblU.textContent = leds.U ? "on" : "off";
+      lblD.textContent = leds.D ? "on" : "off";
+      lblR.textContent = leds.R ? "on" : "off";
+      lblL.textContent = leds.L ? "on" : "off";
+    }
+
+    function connect(){
+      if(ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+      ws = new WebSocket("ws://127.0.0.1:8765");
+
+      ws.onopen = () => {
+        connEl.textContent = "connected";
+        connEl.style.color = "#2fff7a";
+      };
+
+      ws.onclose = () => {
+        connEl.textContent = "disconnected";
+        connEl.style.color = "";
+        // Auto-retry every 3 s
+        setTimeout(connect, 3000);
+      };
+
+      ws.onerror = () => {
+        connEl.textContent = "error";
+        connEl.style.color = "#ff6b6b";
+      };
+
+      ws.onmessage = (ev) => {
+        frameCount++;
+        if(paused) return;
+        try{
+          const msg = JSON.parse(ev.data);
+          applyState(msg);
+        } catch(e){
+          // ignore malformed lines
+        }
+      };
+    }
+
+    reconnectBtn.addEventListener("click", connect);
+
+    pauseBtn.addEventListener("click", () => {
+      paused = !paused;
+      pauseBtn.textContent         = paused ? "Resume" : "Pause";
+      pauseBtn.style.background    = paused ? "rgba(255,107,107,.18)" : "";
+      pauseBtn.style.borderColor   = paused ? "rgba(255,107,107,.4)"  : "";
+    });
+
+    testBtn.addEventListener("click", () => {
+      if(testInterval){
+        clearInterval(testInterval);
+        testInterval = null;
+        testBtn.textContent       = "Test";
+        testBtn.style.background  = "";
+        testBtn.style.borderColor = "";
+        return;
+      }
+      testBtn.textContent       = "Stop Test";
+      testBtn.style.background  = "rgba(47,255,122,.12)";
+      testBtn.style.borderColor = "rgba(47,255,122,.3)";
+      let t = 0;
+      testInterval = setInterval(() => {
+        const nx = Math.sin(t), ny = Math.cos(t);
+        t += 0.08;
+        // Map normalised value back to ADC counts (inverted axis)
+        const rawX = nx >= 0 ? Math.round(ADC_CX * (1 - nx))        : Math.round(ADC_CX - nx * (1023 - ADC_CX));
+        const rawY = ny >= 0 ? Math.round(ADC_CY * (1 - ny))        : Math.round(ADC_CY - ny * (1023 - ADC_CY));
+        applyState({ x: rawX, y: rawY, mode: 0 });
+      }, 50);
+    });
+
+    connect();
+  </script>
+</body>
+</html>
