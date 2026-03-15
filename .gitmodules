@@ -1,0 +1,3 @@
+[submodule "lib/Bonezegei_DS1307"]
+	path = lib/Bonezegei_DS1307
+	url = https://github.com/bonezegei/Bonezegei_DS1307.git

@@ -1,3 +1,31 @@
+# Build output
+
+build/
+*.elf
+*.hex
+*.o
+*.map
+
+# Temporary files
+
+*.tmp
+*.log
+
+# Python cache (for GUI server scripts)
+
+**pycache**/
+*.pyc
+
+# Editor / IDE files
+
+.vscode/
+*.swp
+*.swo
+
+# OS junk
+
+.DS_Store
+Thumbs.db
 # PlatformIO directories and files
 .pio/
 .vscode/

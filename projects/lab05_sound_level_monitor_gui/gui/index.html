@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sound Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      color: #222;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    }
+
+    .label {
+      color: #666;
+      font-size: 0.95rem;
+    }
+
+    .big {
+      font-size: 2.2rem;
+      font-weight: bold;
+      margin-top: 8px;
+    }
+
+    .status-ok {
+      color: green;
+      font-weight: bold;
+      margin-top: 8px;
+      transition: color 0.3s ease;
+    }
+
+    .status-alert {
+      color: red;
+      font-weight: bold;
+      margin-top: 8px;
+      transition: color 0.3s ease;
+    }
+
+    .chart-card {
+      margin-bottom: 20px;
+    }
+
+    .events-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .events-list li {
+      border-bottom: 1px solid #eee;
+      padding: 10px 0;
+    }
+
+    @media (max-width: 850px) {
+      .grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    @media (max-width: 500px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Sound Level Monitor</h1>
+
+    <div class="grid">
+      <div class="card">
+        <div class="label">Current Sound Level</div>
+        <div class="big" id="currentValue">0 <span style="font-size:1.2rem;font-weight:normal">dB</span></div>
+      </div>
+
+      <div class="card">
+        <div class="label">Threshold</div>
+        <div class="big" id="currentThreshold">0 <span style="font-size:1.2rem;font-weight:normal">dB</span></div>
+      </div>
+
+      <div class="card">
+        <div class="label">Calibration Offset</div>
+        <div class="big" id="calibOffset">— <span style="font-size:1.2rem;font-weight:normal">dB</span></div>
+        <div style="color:#888;font-size:0.8rem;margin-top:4px">Ref voltage: <span id="refVoltage">—</span> V</div>
+      </div>
+
+      <div class="card">
+        <div class="label">Status</div>
+        <div id="statusText" class="status-ok">Normal</div>
+      </div>
+    </div>
+
+    <div class="card chart-card">
+      <canvas id="soundChart" style="width:100% !important; height:320px !important;"></canvas>
+    </div>
+
+    <div class="card">
+      <h3>Threshold Events</h3>
+      <button onclick="downloadCSV()" style="margin-bottom:10px;padding:6px 14px;cursor:pointer;">Download CSV</button>
+      <ul class="events-list" id="eventsList">
+        <li>No events yet.</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const ctx = document.getElementById("soundChart").getContext("2d");
+
+    const soundChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: "Sound Level (dB)",
+            data: [],
+            borderWidth: 2,
+            tension: 0.25,
+            fill: false
+          },
+          {
+            label: "Threshold (dB)",
+            data: [],
+            borderWidth: 2,
+            borderDash: [8, 5],
+            fill: false
+          }
+        ]
+      },
+      options: {
+        animation: false,
+        responsive: false,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            min: 0,
+            max: 120,
+            title: { display: true, text: "dB" }
+          }
+        }
+      }
+    });
+
+    let lastEventCount = -1;
+    let isFetching = false;
+
+    async function fetchData() {
+      if (isFetching) return;
+      isFetching = true;
+      try {
+        const response = await fetch("http://localhost:5000/data");
+        const result = await response.json();
+
+        const dbEl = document.getElementById("currentValue");
+        dbEl.innerHTML = `${result.current_value} <span style="font-size:1.2rem;font-weight:normal">dB</span>`;
+        const thrEl = document.getElementById("currentThreshold");
+        thrEl.innerHTML = `${result.threshold} <span style="font-size:1.2rem;font-weight:normal">dB</span>`;
+
+        document.getElementById("calibOffset").innerHTML =
+          `${result.calibration_offset} <span style="font-size:1.2rem;font-weight:normal">dB</span>`;
+        document.getElementById("refVoltage").textContent = result.reference_voltage;
+
+        const statusText = document.getElementById("statusText");
+        if (result.alert === 1) {
+          statusText.textContent = "Threshold exceeded";
+          statusText.className = "status-alert";
+        } else {
+          statusText.textContent = "Normal";
+          statusText.className = "status-ok";
+        }
+
+        soundChart.data.labels = result.data.map(p => p.time);
+        soundChart.data.datasets[0].data = result.data.map(p => p.value);
+        soundChart.data.datasets[1].data = result.data.map(() => result.threshold);
+        soundChart.update("none");
+
+        if (result.events.length !== lastEventCount) {
+          lastEventCount = result.events.length;
+          const eventsList = document.getElementById("eventsList");
+          eventsList.innerHTML = "";
+          if (result.events.length === 0) {
+            eventsList.innerHTML = "<li>No events yet.</li>";
+          } else {
+            result.events.forEach(event => {
+              const li = document.createElement("li");
+              li.innerHTML = `<strong>${event.time}</strong><br>Value: ${event.value} dB | Threshold: ${event.threshold} dB`;              eventsList.appendChild(li);
+            });
+          }
+        }
+
+      } catch (err) {
+        console.error("Fetch error:", err);
+      } finally {
+        isFetching = false;
+        setTimeout(fetchData, 500);
+      }
+    }
+
+    function downloadCSV() {
+      window.location.href = "http://localhost:5000/download-csv";
+    }
+
+    fetchData();
+  </script>
+</body>
+</html>
